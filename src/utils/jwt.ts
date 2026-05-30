@@ -8,4 +8,4 @@ export const signToken = (payload: Omit<JwtPayload, 'iat' | 'exp'>): string =>
   jwt.sign(payload, SECRET, { expiresIn: EXPIRES } as jwt.SignOptions);
 
 export const verifyToken = (token: string): JwtPayload =>
-  jwt.verify(token, SECRET) as JwtPayload;
+  jwt.verify(token, SECRET) as unknown as JwtPayload;

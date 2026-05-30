@@ -14,7 +14,7 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
-export const query = <T = Record<string, unknown>>(
+export const query = <T extends import('pg').QueryResultRow = any>(
   text: string,
   params?: unknown[],
 ) => pool.query<T>(text, params);

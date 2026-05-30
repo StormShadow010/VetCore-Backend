@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { authenticate, authorize } from '../middlewares/auth.middleware';
 
 // Controllers
-import { login, getMe } from '../controllers/auth.controller';
+import { login, getMe, register } from '../controllers/auth.controller';
 import {
   getEspecialidades, createEspecialidad, updateEspecialidad, deleteEspecialidad,
   getEspecies, createEspecie, updateEspecie,
@@ -36,6 +36,7 @@ const router = Router();
 
 // ─── AUTH (pública) ───────────────────────────────────────────
 router.post('/auth/login',          login);
+router.post('/auth/register',       register);
 router.get ('/auth/me',  authenticate, getMe);
 
 // ─── CATÁLOGOS (CONSULTA+) ────────────────────────────────────

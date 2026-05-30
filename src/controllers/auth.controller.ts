@@ -59,7 +59,6 @@ export const login = async (req: Request, res: Response): Promise<void> => {
 };
 
 export const getMe = async (req: Request, res: Response): Promise<void> => {
-  // req.user viene del middleware authenticate
   const { user } = req as typeof req & { user: { sub: number } };
 
   try {
@@ -75,6 +74,45 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {
     logger.error('getMe error', err);
+    serverError(res);
+  }
+};
+
+export const register = async (req: Request, res: Response): Promise<void> => {
+  const { username, email, password } = req.body as {
+    username?: string;
+    email?: string;
+    password?: string;
+  };
+
+  if (!username || !password) {
+    badRequest(res, ['El usuario y la contraseña son obligatorios']);
+    return;
+  }
+
+  try {
+    // Verificar duplicados de username o email
+    const dup = await query(
+      'SELECT id_usuario FROM usuarios WHERE username = $1 OR (email IS NOT NULL AND email = $2)',
+      [username, email || null],
+    );
+    if (dup.rows.length) {
+      badRequest(res, ['El nombre de usuario o correo ya está registrado']);
+      return;
+    }
+
+    const hash = await bcrypt.hash(password, 10);
+
+    const r = await query(
+      `INSERT INTO usuarios (username, email, password_hash, rol, activo)
+       VALUES ($1, $2, $3, 'USUARIO', true)
+       RETURNING id_usuario, username, email, rol, activo`,
+      [username, email || null, hash],
+    );
+
+    res.status(201).json({ success: true, data: r.rows[0] });
+  } catch (err) {
+    logger.error('register error', err);
     serverError(res);
   }
 };
