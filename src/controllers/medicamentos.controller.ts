@@ -4,18 +4,27 @@ import { ok, created, notFound, serverError } from '../utils/response';
 import { logger } from '../utils/logger';
 
 export const getMedicamentos = async (req: Request, res: Response) => {
-  const { search, activo = 'true' } = req.query;
-  const params: unknown[] = [activo === 'true'];
-  const conditions = ['activo = $1'];
+  const { search, activo } = req.query;
+  const params: unknown[] = [];
+  const conditions: string[] = [];
+
+  // activo='true' -> activos | 'false' -> inactivos | undefined/'todas' -> todos
+  if (activo === 'true') {
+    conditions.push('activo = TRUE');
+  } else if (activo === 'false') {
+    conditions.push('activo = FALSE');
+  }
 
   if (search) {
     params.push(`%${search}%`);
     conditions.push(`(nombre ILIKE $${params.length} OR principio_act ILIKE $${params.length})`);
   }
 
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
   try {
     const r = await query(
-      `SELECT * FROM medicamentos WHERE ${conditions.join(' AND ')} ORDER BY nombre`,
+      `SELECT * FROM medicamentos ${where} ORDER BY nombre`,
       params,
     );
     ok(res, r.rows);
@@ -63,4 +72,45 @@ export const ajustarStock = async (req: Request, res: Response) => {
     if (!r.rows[0]) { notFound(res, 'Medicamento no encontrado o stock insuficiente'); return; }
     ok(res, r.rows[0]);
   } catch (e) { logger.error(e); serverError(res); }
+};
+
+export const deleteMedicamento = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  try {
+    const r = await query(
+      'UPDATE medicamentos SET activo = FALSE WHERE id_medicamento = $1 RETURNING id_medicamento, nombre',
+      [id],
+    );
+    if (!r.rows[0]) { notFound(res, 'Medicamento no encontrado'); return; }
+    ok(res, { message: `Medicamento "${r.rows[0].nombre}" desactivado` });
+  } catch (err) {
+    logger.error('deleteMedicamento error', err);
+    serverError(res);
+  }
+};
+
+export const reactivateMedicamento = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  try {
+    const r = await query(
+      'UPDATE medicamentos SET activo = TRUE WHERE id_medicamento = $1 RETURNING id_medicamento, nombre',
+      [id],
+    );
+    if (!r.rows[0]) { notFound(res, 'Medicamento no encontrado'); return; }
+    ok(res, { message: `Medicamento "${r.rows[0].nombre}" reactivado` });
+  } catch (err) {
+    logger.error('reactivateMedicamento error', err);
+    serverError(res);
+  }
+};
+
+export const hardDeleteMedicamento = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  try {
+    await query('DELETE FROM medicamentos WHERE id_medicamento = $1', [id]);
+    ok(res, { message: 'Medicamento eliminado permanentemente' });
+  } catch (err) {
+    logger.error('hardDeleteMedicamento error', err);
+    serverError(res);
+  }
 };

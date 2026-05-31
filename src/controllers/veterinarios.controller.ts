@@ -3,13 +3,18 @@ import { query } from '../config/database';
 import { ok, created, notFound, serverError, conflict } from '../utils/response';
 import { logger } from '../utils/logger';
 
-export const getVeterinarios = async (_req: Request, res: Response) => {
+export const getVeterinarios = async (req: Request, res: Response) => {
+  const { activo } = req.query;
+  let whereClause = 'WHERE v.activo = TRUE'; // default: solo activos
+  if (activo === 'false') whereClause = 'WHERE v.activo = FALSE';
+  if (activo === 'todas') whereClause = '';  // sin filtro
+
   try {
     const r = await query(
       `SELECT v.*, esp.nombre AS especialidad_nombre
        FROM veterinarios v
        JOIN especialidades esp ON esp.id_especialidad = v.id_especialidad
-       WHERE v.activo = TRUE ORDER BY v.apellidos`,
+       ${whereClause} ORDER BY v.activo DESC, v.apellidos`,
     );
     ok(res, r.rows);
   } catch (e) { logger.error(e); serverError(res); }

@@ -39,7 +39,7 @@ export const deleteEspecialidad = async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
     await query('DELETE FROM especialidades WHERE id_especialidad=$1', [id]);
-    noContent(res);
+    ok(res, { message: 'Especialidad eliminada' });
   } catch (e) { logger.error(e); serverError(res); }
 };
 
@@ -72,5 +72,13 @@ export const updateEspecie = async (req: Request, res: Response) => {
     );
     if (!r.rows[0]) { notFound(res, 'Especie no encontrada'); return; }
     ok(res, r.rows[0]);
+  } catch (e) { logger.error(e); serverError(res); }
+};
+
+export const deleteEspecie = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    await query('DELETE FROM especies WHERE id_especie=$1', [id]);
+    ok(res, { message: 'Especie eliminada' });
   } catch (e) { logger.error(e); serverError(res); }
 };

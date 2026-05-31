@@ -79,36 +79,64 @@ export const getMe = async (req: Request, res: Response): Promise<void> => {
 };
 
 export const register = async (req: Request, res: Response): Promise<void> => {
-  const { username, email, password } = req.body as {
-    username?: string;
-    email?: string;
-    password?: string;
+  const { username, email, password, nombres, apellidos, telefono, ciudad } = req.body as {
+    username?: string; email?: string; password?: string;
+    nombres?: string; apellidos?: string; telefono?: string; ciudad?: string;
   };
 
-  if (!username || !password) {
-    badRequest(res, ['El usuario y la contraseña son obligatorios']);
+  if (!username || !password || !email) {
+    badRequest(res, ['Usuario, email y contraseña son obligatorios']);
+    return;
+  }
+  if (!nombres || !apellidos) {
+    badRequest(res, ['Nombres y apellidos son obligatorios para crear tu perfil de propietario']);
     return;
   }
 
+  // Import getClient for transaction
+  const { getClient } = await import('../config/database');
+  const client = await getClient();
+
   try {
-    // Verificar duplicados de username o email
-    const dup = await query(
+    await client.query('BEGIN');
+
+    // Verificar duplicados
+    const dup = await client.query(
       'SELECT id_usuario FROM usuarios WHERE username = $1 OR (email IS NOT NULL AND email = $2)',
-      [username, email || null],
+      [username, email],
     );
     if (dup.rows.length) {
+      await client.query('ROLLBACK');
       badRequest(res, ['El nombre de usuario o correo ya está registrado']);
       return;
     }
 
     const hash = await bcrypt.hash(password, 10);
 
-    const r = await query(
+    // 1. Crear usuario con rol USUARIO
+    const r = await client.query(
       `INSERT INTO usuarios (username, email, password_hash, rol, activo)
        VALUES ($1, $2, $3, 'USUARIO', true)
        RETURNING id_usuario, username, email, rol, activo`,
-      [username, email || null, hash],
+      [username, email, hash],
     );
+
+    // 2. Crear propietario vinculado por email
+    // Verificar si ya existe propietario con ese email
+    const existeProp = await client.query(
+      'SELECT id_propietario FROM propietarios WHERE email = $1', [email]
+    );
+    if (!existeProp.rows.length) {
+      // Generar cédula temporal única (puede actualizarse después)
+      const cedulaTemp = `USR${Date.now()}`.slice(0, 20);
+      await client.query(
+        `INSERT INTO propietarios (cedula, nombres, apellidos, email, telefono, ciudad, activo)
+         VALUES ($1, $2, $3, $4, $5, $6, true)`,
+        [cedulaTemp, nombres, apellidos, email, telefono || null, ciudad || null],
+      );
+    }
+
+    await client.query('COMMIT');
 
     res.status(201).json({ success: true, data: r.rows[0] });
   } catch (err) {

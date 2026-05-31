@@ -147,3 +147,33 @@ export const updateFactura = async (req: Request, res: Response) => {
     ok(res, r.rows[0]);
   } catch (e) { logger.error(e); serverError(res); }
 };
+
+export const createFactura = async (req: Request, res: Response) => {
+  const { id_cita, subtotal, descuento_pct = 0, metodo_pago, pagado = false } = req.body;
+  if (!id_cita || subtotal === undefined) {
+    res.status(400).json({ success: false, message: 'id_cita y subtotal son obligatorios' }); return;
+  }
+  try {
+    // Verificar que la cita existe y no tiene factura aún
+    const existing = await query('SELECT id_factura FROM facturas WHERE id_cita = $1', [id_cita]);
+    if (existing.rows.length) {
+      res.status(400).json({ success: false, message: 'Esta cita ya tiene una factura registrada' }); return;
+    }
+    const total = Number(subtotal) * (1 - Number(descuento_pct) / 100);
+    const r = await query(
+      `INSERT INTO facturas (id_cita, subtotal, descuento_pct, total, metodo_pago, pagado)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [id_cita, subtotal, descuento_pct, total, metodo_pago || null, pagado],
+    );
+    ok(res, r.rows[0]);
+  } catch (e) { logger.error(e); serverError(res); }
+};
+
+export const deleteFactura = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const r = await query('DELETE FROM facturas WHERE id_factura = $1 RETURNING id_factura', [id]);
+    if (!r.rows[0]) { notFound(res, 'Factura no encontrada'); return; }
+    ok(res, { message: 'Factura eliminada' });
+  } catch (e) { logger.error(e); serverError(res); }
+};

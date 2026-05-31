@@ -77,3 +77,18 @@ export const changePassword = async (req: Request, res: Response) => {
     ok(res, { message: 'Contraseña actualizada' });
   } catch (e) { logger.error(e); serverError(res); }
 };
+
+export const deleteUsuario = async (req: Request, res: Response): Promise<void> => {
+  const { id } = req.params;
+  try {
+    // Verificar que no sea el propio superadmin eliminándose
+    const check = await query('SELECT username, rol FROM usuarios WHERE id_usuario = $1', [id]);
+    if (!check.rows[0]) { notFound(res, 'Usuario no encontrado'); return; }
+    const username = check.rows[0].username;
+    await query('DELETE FROM usuarios WHERE id_usuario = $1', [id]);
+    ok(res, { message: `Usuario "${username}" eliminado permanentemente` });
+  } catch (err) {
+    logger.error('deleteUsuario error', err);
+    serverError(res);
+  }
+};

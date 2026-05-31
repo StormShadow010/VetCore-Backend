@@ -22,9 +22,22 @@ const CITA_WITH_JOINS = `
 `;
 
 export const getCitas = async (req: Request, res: Response) => {
-  const { estado, fecha, id_veterinario, id_mascota } = req.query;
+  const { estado, fecha, id_veterinario, id_mascota, mis_citas } = req.query;
+  const user = (req as typeof req & { user?: { sub: number; rol: string } }).user;
   const params: unknown[] = [];
   const conditions: string[] = [];
+
+  // USUARIO → solo sus citas (mascotas que le pertenecen a través de propietarios vinculados)
+  if (mis_citas === 'true' && user) {
+    // Filtramos citas cuya mascota tiene un propietario con el mismo email que el usuario
+    params.push(user.sub);
+    conditions.push(`c.id_mascota IN (
+      SELECT m.id_mascota FROM mascotas m
+      JOIN propietarios p ON p.id_propietario = m.id_propietario
+      JOIN usuarios u ON u.email = p.email
+      WHERE u.id_usuario = $${params.length}
+    )`);
+  }
 
   if (estado) {
     params.push(estado);

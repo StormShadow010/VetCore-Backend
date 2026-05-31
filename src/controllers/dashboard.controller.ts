@@ -3,23 +3,56 @@ import { query } from '../config/database';
 import { ok, serverError } from '../utils/response';
 import { logger } from '../utils/logger';
 
-export const getDashboard = async (_req: Request, res: Response) => {
+export const getDashboard = async (req: Request, res: Response) => {
+  const user = (req as typeof req & { user?: { sub: number; rol: string } }).user;
+  const isUsuario = user?.rol === 'USUARIO';
+
   try {
-    const [citas, mascotas, ingresos, stock] = await Promise.all([
-      query(`
+    let citasQuery: string;
+    let citasParams: unknown[] = [];
+    let mascotasQuery: string;
+    let mascotasParams: unknown[] = [];
+
+    if (isUsuario && user) {
+      // USUARIO: solo sus citas y mascotas (vinculadas por email del propietario)
+      citasQuery = `
+        SELECT
+          COUNT(*) FILTER (WHERE c.estado='PENDIENTE')  AS pendientes,
+          COUNT(*) FILTER (WHERE c.estado='ATENDIDA')   AS atendidas,
+          COUNT(*) FILTER (WHERE DATE(c.fecha_hora)=CURRENT_DATE) AS hoy
+        FROM citas c
+        JOIN mascotas m ON m.id_mascota = c.id_mascota
+        JOIN propietarios p ON p.id_propietario = m.id_propietario
+        JOIN usuarios u ON u.email = p.email
+        WHERE u.id_usuario = $1`;
+      citasParams = [user.sub];
+      mascotasQuery = `
+        SELECT COUNT(*) AS total FROM mascotas m
+        JOIN propietarios p ON p.id_propietario = m.id_propietario
+        JOIN usuarios u ON u.email = p.email
+        WHERE m.activa = TRUE AND u.id_usuario = $1`;
+      mascotasParams = [user.sub];
+    } else {
+      citasQuery = `
         SELECT
           COUNT(*) FILTER (WHERE estado='PENDIENTE')  AS pendientes,
           COUNT(*) FILTER (WHERE estado='ATENDIDA')   AS atendidas,
           COUNT(*) FILTER (WHERE DATE(fecha_hora)=CURRENT_DATE) AS hoy
-        FROM citas`),
-      query(`SELECT COUNT(*) AS total FROM mascotas WHERE activa=TRUE`),
-      query(`
+        FROM citas`;
+      mascotasQuery = `SELECT COUNT(*) AS total FROM mascotas WHERE activa=TRUE`;
+    }
+
+    const [citas, mascotas, ingresos, stock] = await Promise.all([
+      query(citasQuery, citasParams),
+      query(mascotasQuery, mascotasParams),
+      isUsuario ? Promise.resolve({ rows: [{ total_mes: 0, cobrado_mes: 0 }] }) : query(`
         SELECT
           COALESCE(SUM(total),0) AS total_mes,
           COALESCE(SUM(total) FILTER (WHERE pagado=TRUE),0) AS cobrado_mes
         FROM facturas
         WHERE DATE_TRUNC('month', fecha_emision) = DATE_TRUNC('month', NOW())`),
-      query(`SELECT COUNT(*) AS bajo_stock FROM medicamentos WHERE stock < 20 AND activo=TRUE`),
+      isUsuario ? Promise.resolve({ rows: [{ bajo_stock: 0 }] }) :
+        query(`SELECT COUNT(*) AS bajo_stock FROM medicamentos WHERE stock < 20 AND activo=TRUE`),
     ]);
 
     ok(res, {
