@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { query } from '../config/database';
+import { query, getClient } from '../config/database';
 import { signToken } from '../utils/jwt';
 import { Usuario } from '../types';
 import { unauthorized, badRequest, serverError } from '../utils/response';
@@ -88,13 +88,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     badRequest(res, ['Usuario, email y contraseña son obligatorios']);
     return;
   }
-  if (!nombres || !apellidos) {
-    badRequest(res, ['Nombres y apellidos son obligatorios para crear tu perfil de propietario']);
-    return;
-  }
+  // nombres y apellidos son opcionales — si no vienen usamos el username
+  const propNombres = nombres?.trim() || username;
+  const propApellidos = apellidos?.trim() || '';
 
-  // Import getClient for transaction
-  const { getClient } = await import('../config/database');
   const client = await getClient();
 
   try {
@@ -132,7 +129,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       await client.query(
         `INSERT INTO propietarios (cedula, nombres, apellidos, email, telefono, ciudad, activo)
          VALUES ($1, $2, $3, $4, $5, $6, true)`,
-        [cedulaTemp, nombres, apellidos, email, telefono || null, ciudad || null],
+        [cedulaTemp, propNombres, propApellidos, email, telefono || null, ciudad || null],
       );
     }
 
